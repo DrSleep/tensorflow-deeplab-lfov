@@ -12,6 +12,9 @@ from datetime import datetime
 import os
 import sys
 import time
+
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import tensorflow as tf
@@ -31,7 +34,7 @@ SAVE_DIR = './images/'
 SAVE_NUM_IMAGES = 2
 SAVE_PRED_EVERY = 500
 SNAPSHOT_DIR = './snapshots/'
-WEIGHTS_PATH   = "./util/weights.ckpt"
+WEIGHTS_PATH   = None
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 
@@ -122,6 +125,9 @@ def main():
     # Start queue threads.
     threads = tf.train.start_queue_runners(coord=coord, sess=sess)
     
+    if not os.path.exists(args.save_dir):
+      os.makedirs(args.save_dir)
+   
     # Iterate over training steps.
     for step in range(args.num_steps):
         start_time = time.time()
@@ -139,6 +145,7 @@ def main():
                 axes.flat[i * 3 + 2].set_title('pred')
                 axes.flat[i * 3 + 2].imshow(decode_labels(preds[i, :, :, 0]))
             plt.savefig(args.save_dir + str(start_time) + ".png")
+            plt.close(fig)
             save(saver, sess, args.snapshot_dir, step)
         else:
             loss_value, _ = sess.run([loss, optim])
