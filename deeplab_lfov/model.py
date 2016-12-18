@@ -1,11 +1,19 @@
 import tensorflow as tf
 from six.moves import cPickle
 
-with open("from_caffe/net_skeleton.cpkt", "rb") as f:
+# Loading net skeleton with parameters name and shapes.
+with open("./util/net_skeleton.ckpt", "rb") as f:
     net_skeleton = cPickle.load(f)
 
-# TO DO: brush up this part
-ks = 3
+# The DeepLab-LargeFOV model can be represented as follows:
+## input -> [conv-relu](dilation=1, channels=64) x 2 -> [max_pool](stride=2)
+##       -> [conv-relu](dilation=1, channels=128) x 2 -> [max_pool](stride=2)
+##       -> [conv-relu](dilation=1, channels=256) x 3 -> [max_pool](stride=2)
+##       -> [conv-relu](dilation=1, channels=512) x 3 -> [max_pool](stride=1)
+##       -> [conv-relu](dilation=2, channels=512) x 3 -> [max_pool](stride=1) -> [avg_pool](stride=1)
+##       -> [conv-relu](dilation=12, channels=1024) -> [dropout]
+##       -> [conv-relu](dilation=1, channels=1024) -> [dropout]
+##       -> [conv-relu](dilation=1, channels=21) -> [pixel-wise softmax loss].
 num_layers    = [2, 2, 3, 3, 3, 1, 1, 1]
 dilations     = [[1, 1],
                  [1, 1],
@@ -15,6 +23,10 @@ dilations     = [[1, 1],
                  [12], 
                  [1], 
                  [1]]
+n_classes = 21
+# All convolutional and pooling operations are applied using kernels of size 3x3; 
+# padding is added so that the output of the same size as the input.
+ks = 3
 
 def create_variable(name, shape):
     """Create a convolution filter variable of the given name and shape,
@@ -41,148 +53,122 @@ class DeepLabLFOVModel(object):
     there for details.
     """
     
-    def __init__(self, input_size, weights_path, enable_crf=False):
+    def __init__(self, weights_path=None):
         """Create the model.
         
         Args:
-          input_size: a tuple of integers, representing height and width of the input image, respectively.
-          weights_path: the path to the cpkt file with dictionary of weights.
-          enable_crf: if set, apply CRF during the post-processing with default parameters.
+          weights_path: the path to the cpkt file with dictionary of weights from .caffemodel.
         """
-        self.input_size = input_size
-        self.enable_crf = enable_crf
-        
         self.variables = self._create_variables(weights_path)
         
     def _create_variables(self, weights_path):
         """Create all variables used by the network.
-        This allows to share them between multiple calls to the loss
-        function and generation function.
+        This allows to share them between multiple calls 
+        to the loss function.
         
         Args:
-          weights_path: the path to the cpkt file with dictionary of weights.
+          weights_path: the path to the ckpt file with dictionary of weights from .caffemodel. 
+                        If none, initialise all variables randomly.
         
         Returns:
           A dictionary with all variables.
         """
         var = list()
+        index = 0
+        
         if weights_path is not None:
             with open(weights_path, "rb") as f:
-                weights = cPickle.load(f)
-        
-                # TO DO: brush this
-        index = 0
-        for block_index, layers in enumerate(num_layers):
-            with tf.variable_scope("block{}".format(block_index)):
-                current = list()
-                for _ in xrange(layers):
-                    current.append(tf.Variable(weights[net_skeleton[index][0]],
-                                               name=net_skeleton[index][0]
-                                               )
-                                   )
-                    index += 1
-                    current.append(tf.Variable(weights[net_skeleton[index][0]],
-                                               name=net_skeleton[index][0]
-                                               )
-                                   )
-                    index += 1
-                var.append(current)
-        del weights
-        '''
-        # TO DO: brush this
-        index = 0
-        for block_index, layers in enumerate(num_layers):
-            with tf.variable_scope("block{}".format(block_index)):
-                current = list()
-                for _ in xrange(layers):
-                    current.append(create_variable(net_skeleton[index][0],
-                                                   list(net_skeleton[index][1])
-                                                   )
-                                   )
-                    index += 1
-                    current.append(create_variable(net_skeleton[index][0],
-                                                   list(net_skeleton[index][1])
-                                                   )
-                                   )
-                    index += 1
-                var.append(current)
-        '''
+                weights = cPickle.load(f) # Load pre-trained weights.
+                for name, shape in net_skeleton:
+                    var.append(tf.Variable(weights[name],
+                                           name=name))
+                del weights
+        else:
+            # Initialise all weights randomly with the Xavier scheme,
+            # and 
+            # all biases to 0's.
+            for name, shape in net_skeleton:
+                if "/w" in name: # Weight filter.
+                    w = create_variable(name, list(shape))
+                    var.append(w)
+                else:
+                    b = create_bias_variable(name, list(shape))
+                    var.append(b)
         return var
     
-    def _create_conv_block(self, input_batch, block_index):
-        """Create a single block of [conv-relu]{2,3}-pool layers.
-        
-        Args:
-          input_batch: input to the block.
-          layer_index: the index of the current block.
-          
-        Returns:
-          An output of the block.
-        """
-        variables = self.variables[block_index]
-        current = input_batch
     
-        for l in xrange(len(variables) / 2): 
-            weights_filter = variables[l * 2]
-            bias_filter = variables[l * 2 + 1]
-            dilation = dilations[block_index][l]
-            if dilation == 1:
-                conv = tf.nn.conv2d(current, weights_filter, strides=[1, 1, 1, 1], padding='SAME')
-            else:
-                conv = tf.nn.atrous_conv2d(current, weights_filter, dilation, padding='SAME')
-            current = tf.nn.relu(tf.nn.bias_add(conv, bias_filter))
-            
-        # pooling
-        if block_index < 3:
-            current = tf.nn.max_pool(current, 
-                                     ksize=[1, ks, ks, 1],
-                                     strides=[1, 2, 2, 1],
-                                     padding='SAME')
-        elif block_index == 3:
-            current = tf.nn.max_pool(current, 
-                         ksize=[1, ks, ks, 1],
-                         strides=[1, 1, 1, 1],
-                         padding='SAME')
-        elif block_index == 4:
-            current = tf.nn.max_pool(current, 
-                                     ksize=[1, ks, ks, 1],
-                                     strides=[1, 1, 1, 1],
-                                     padding='SAME')
-            current = tf.nn.avg_pool(current, 
-                                     ksize=[1, ks, ks, 1],
-                                     strides=[1, 1, 1, 1],
-                                     padding='SAME')
-        elif block_index <= 6:
-            current = tf.nn.dropout(current, keep_prob=0.5)
-            
-        return current
-    
-    def _create_network(self, input_batch):
+    def _create_network(self, input_batch, keep_prob):
         """Construct DeepLab-LargeFOV network.
         
         Args:
           input_batch: batch of pre-processed images.
+          keep_prob: probability of keeping neurons intact.
           
         Returns:
           A downsampled segmentation mask. 
         """
-        current_layer = input_batch
-        for block_index in xrange(len(dilations)):
-            current_layer = self._create_conv_block(current_layer, block_index)
-        return current_layer
-    
-    def _load_weights(self, weights_path):
-        """Load weights from the pre-trained network.
+        current = input_batch
         
+        v_idx = 0 # Index variable.
+        
+        # Last block is the classification layer.
+        for b_idx in xrange(len(dilations) - 1):
+            for l_idx, dilation in enumerate(dilations[b_idx]):
+                w = self.variables[v_idx * 2]
+                b = self.variables[v_idx * 2 + 1]
+                if dilation == 1:
+                    conv = tf.nn.conv2d(current, w, strides=[1, 1, 1, 1], padding='SAME')
+                else:
+                    conv = tf.nn.atrous_conv2d(current, w, dilation, padding='SAME')
+                current = tf.nn.relu(tf.nn.bias_add(conv, b))
+                v_idx += 1
+            # Optional pooling and dropout after each block.
+            if b_idx < 3:
+                current = tf.nn.max_pool(current, 
+                                         ksize=[1, ks, ks, 1],
+                                         strides=[1, 2, 2, 1],
+                                         padding='SAME')
+            elif b_idx == 3:
+                current = tf.nn.max_pool(current, 
+                             ksize=[1, ks, ks, 1],
+                             strides=[1, 1, 1, 1],
+                             padding='SAME')
+            elif b_idx == 4:
+                current = tf.nn.max_pool(current, 
+                                         ksize=[1, ks, ks, 1],
+                                         strides=[1, 1, 1, 1],
+                                         padding='SAME')
+                current = tf.nn.avg_pool(current, 
+                                         ksize=[1, ks, ks, 1],
+                                         strides=[1, 1, 1, 1],
+                                         padding='SAME')
+            elif b_idx <= 6:
+                current = tf.nn.dropout(current, keep_prob=keep_prob)
+        
+        # Classification layer; no ReLU.
+        w = self.variables[v_idx * 2]
+        b = self.variables[v_idx * 2 + 1]
+        conv = tf.nn.conv2d(current, w, strides=[1, 1, 1, 1], padding='SAME')
+        current = tf.nn.bias_add(conv, b)
+
+        return current
+    
+    def prepare_label(self, input_batch, new_size):
+        """Resize masks and perform one-hot encoding.
+
         Args:
-          weights_path: the path to the cpkt file with dictionary of weights.
+          input_batch: input tensor of shape [batch_size H W 1].
+          new_size: a tensor with new height and width.
+
+        Returns:
+          Outputs a tensor of shape [batch_size h w 21]
+          with last dimension comprised of 0's and 1's only.
         """
-        with open(weights_path, "rb") as f:
-            weights = cPickle.load(f)
-        for block in xrange(len(self.variables)):
-            for variable in self.variables[block]:
-                print variable.name
-                variable.assign(weights[variable.name[7:-2]])
+        with tf.name_scope('label_encode'):
+            input_batch = tf.image.resize_nearest_neighbor(input_batch, new_size) # As labels are integer numbers, need to use NN interp.
+            input_batch = tf.squeeze(input_batch, squeeze_dims=[3]) # Reducing the channel dimension.
+            input_batch = tf.one_hot(input_batch, depth=21)
+        return input_batch
       
     def preds(self, input_batch):
         """Create the network and run inference on the input batch.
@@ -191,10 +177,33 @@ class DeepLabLFOVModel(object):
           input_batch: batch of pre-processed images.
           
         Returns:
-          A unnormalised downsampled predictions from the network.
+          Argmax over the predictions of the network of the same shape as the input.
         """
-        height, width = input_batch.shape[1:3]
-        raw_output = self._create_network(input_batch)
-        raw_output = tf.image.resize_images(raw_output, [height, width])
-        return raw_output
-        #self._load_weights("from_caffe/net_weights.cpkt") # TO DO: Should be run once, during the initialisation
+        raw_output = self._create_network(tf.cast(input_batch, tf.float32), keep_prob=tf.constant(1.0))
+        raw_output = tf.image.resize_bilinear(raw_output, tf.shape(input_batch)[1:3,])
+        raw_output = tf.argmax(raw_output, dimension=3)
+        raw_output = tf.expand_dims(raw_output, dim=3) # Create 4D-tensor.
+        return tf.cast(raw_output, tf.uint8)
+        
+    
+    def loss(self, img_batch, label_batch):
+        """Create the network, run inference on the input batch and compute loss.
+        
+        Args:
+          input_batch: batch of pre-processed images.
+          
+        Returns:
+          Pixel-wise softmax loss.
+        """
+        raw_output = self._create_network(tf.cast(img_batch, tf.float32), keep_prob=tf.constant(0.5))
+        prediction = tf.reshape(raw_output, [-1, n_classes])
+        
+        # Need to resize labels and convert using one-hot encoding.
+        label_batch = self.prepare_label(label_batch, tf.pack(raw_output.get_shape()[1:3]))
+        gt = tf.reshape(label_batch, [-1, n_classes])
+        
+        # Pixel-wise softmax loss.
+        loss = tf.nn.softmax_cross_entropy_with_logits(prediction, gt)
+        reduced_loss = tf.reduce_mean(loss)
+        
+        return reduced_loss
