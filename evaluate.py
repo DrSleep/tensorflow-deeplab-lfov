@@ -24,7 +24,7 @@ DATA_LIST_PATH = './dataset/val.txt'
 NUM_STEPS = 1449
 RESTORE_FROM = None
 SAVE_DIR = './images_val/'
-WEIGHTS_PATH   = './util/net_weights.ckpt'
+WEIGHTS_PATH   = None
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 
