@@ -1,8 +1,8 @@
-# DeepLab-LargeFOV - TensorFlow
+# DeepLab-TensorFlow
 
 This is an implementation of [DeepLab-LargeFOV](http://ccvl.stat.ucla.edu/deeplab-models/deeplab-largefov/) in TensorFlow for semantic image segmentation on [PASCAL VOC dataset](http://host.robots.ox.ac.uk/pascal/VOC/).
 
-## Description of the model
+## Model Description
 
 The DeepLab-LargeFOV is built on a fully convolutional variant of the [VGG-16 net](http://www.robots.ox.ac.uk/~vgg/research/very_deep/) with several modifications: first, it exploits [atrous (dilated) convolutions](https://github.com/fyu/dilation) to increase the field-of-view; second, the number of filters in the last layers is reduced from <code>4096</code> to <code>1024</code> in order to decrease the memory consumption and the time spent on performing one forward-backward pass; third, it omits the last pooling layers to keep the downsampling ratio of <code>8</code>.
 
