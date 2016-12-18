@@ -11,7 +11,7 @@ from datetime import datetime
 import os
 import sys
 import time
-import matplotlib.pyplot as plt
+
 from PIL import Image
 
 import tensorflow as tf
@@ -107,6 +107,9 @@ def main():
     # Start queue threads.
     threads = tf.train.start_queue_runners(coord=coord, sess=sess)
     
+    if not os.path.exists(args.save_dir):
+      os.makedirs(args.save_dir)
+      
     # Iterate over images.
     for step in range(args.num_steps):
         #mIoU_value = sess.run([mIoU])
