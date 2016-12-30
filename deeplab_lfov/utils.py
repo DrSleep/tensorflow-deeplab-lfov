@@ -26,6 +26,6 @@ def decode_labels(mask):
     pixels = img.load()
     for j_, j in enumerate(mask):
         for k_, k in enumerate(j):
-            if k < 20:
+            if k < 21:
                 pixels[k_,j_] = label_colours[k]
     return np.array(img)
