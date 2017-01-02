@@ -39,7 +39,7 @@ pip install -user -r requirements.txt
 ## Caffe to TensorFlow conversion
 
 To imitate the structure of the model, we have used `.caffemodel` files provided by the [authors](http://ccvl.stat.ucla.edu/deeplab-models/deeplab-largefov/). The `.util/extract_params.py` script saves the structure of the network, i.e. the name of the parameters with their corresponding shapes (in TF 'HNWC' format), as well as the weights of those parameters (again, in the TF format). These weights can be used to initialise the variables in the model; otherwise, the filters will be initialised using the Xavier initialisation scheme, and biases will be initiliased as 0s. 
-To use this script you will need to install [Caffe](https://github.com/bvlc/caffe). It is optional, and you can download two already converted models [here](https://drive.google.com/open?id=0B_rootXHuswsTF90M1NWQmFYelU).
+To use this script you will need to install [Caffe](https://github.com/bvlc/caffe). It is optional, and you can download two already converted models (`model.ckpt-init` and `model.ckpt-pretrained`) [here](https://drive.google.com/open?id=0B_rootXHuswsTF90M1NWQmFYelU).
 
 ## Dataset
 
@@ -68,7 +68,7 @@ python evaluate.py --help
 
 ## Inference
 
-To perform inference your own images, use the following command:
+To perform inference over your own images, use the following command:
 ```bash
 python inference.py /path/to/your/image /path/to/ckpt/file
 ```
