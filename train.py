@@ -30,6 +30,7 @@ LEARNING_RATE = 1e-4
 MEAN_IMG = tf.Variable(np.array((104.00698793,116.66876762,122.67891434)), trainable=False, dtype=tf.float32)
 NUM_STEPS = 20000
 RANDOM_SCALE = True
+RESTORE_FROM = './deeplab_lfov.ckpt'
 SAVE_DIR = './images/'
 SAVE_NUM_IMAGES = 2
 SAVE_PRED_EVERY = 500
@@ -57,6 +58,8 @@ def get_arguments():
                         help="Learning rate for training.")
     parser.add_argument("--num_steps", type=int, default=NUM_STEPS,
                         help="Number of training steps.")
+    parser.add_argument("--restore_from", type=str, default=RESTORE_FROM,
+                        help="Where restore model parameters from.")
     parser.add_argument("--save_dir", type=str, default=SAVE_DIR,
                         help="Where to save figures with predictions.")
     parser.add_argument("--save_num_images", type=int, default=SAVE_NUM_IMAGES,
@@ -79,6 +82,17 @@ def save(saver, sess, logdir, step):
 
     saver.save(sess, checkpoint_path, global_step=step)
     print('The checkpoint has been created.')
+    
+def load(loader, sess, ckpt_path):
+    '''Load trained weights.
+    
+    Args:
+      loader: TensorFlow saver object.
+      sess: TensorFlow session.
+      ckpt_path: path to checkpoint file with parameters.
+    ''' 
+    loader.restore(sess, ckpt_path)
+    print("Restored model parameters from {}".format(ckpt_path))
 
 def main():
     """Create the model and start the training."""
@@ -121,12 +135,14 @@ def main():
     
     # Saver for storing checkpoints of the model.
     saver = tf.train.Saver(var_list=trainable, max_to_keep=40)
+    if args.restore_from is not None:
+        load(saver, sess, args.restore_from)
     
     # Start queue threads.
     threads = tf.train.start_queue_runners(coord=coord, sess=sess)
     
     if not os.path.exists(args.save_dir):
-      os.makedirs(args.save_dir)
+        os.makedirs(args.save_dir)
    
     # Iterate over training steps.
     for step in range(args.num_steps):
