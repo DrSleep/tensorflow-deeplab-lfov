@@ -79,3 +79,6 @@ This will run the forward pass and save the resulted mask with this colour map:
 ## Missing features
 
 At the moment, the post-processing step with CRF is not implemented. Besides that, the weight decay is missing, as well.
+
+## Other implementations
+* [DeepLab-ResNet in TensorFlow](https://github.com/DrSleep/tensorflow-deeplab-resnet)
