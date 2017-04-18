@@ -138,6 +138,7 @@ class DeepLabLFOVModel(object):
                                          ksize=[1, ks, ks, 1],
                                          strides=[1, 1, 1, 1],
                                          padding='SAME')
+            elif b_idx == 5:
                 current = tf.nn.avg_pool(current, 
                                          ksize=[1, ks, ks, 1],
                                          strides=[1, 1, 1, 1],
